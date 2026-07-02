@@ -115,7 +115,7 @@
 - d) O gateway repassa a senha do banco
 
 > **Fonte:** guia Fase 6.3 · slides "Managed Identity". Sem o papel, o `LogsQueryClient` toma 403 e os nós não acendem.
-> **Bônus (opcional, conceito):** em produção, essa mesma Managed Identity resolveria segredos do **Key Vault** — o destino de produção (hoje registrado como débito).
+> **Bônus (opcional, conceito):** essa mesma Managed Identity resolve os segredos do **Key Vault** — entregue na missão Blindar (ADE-010): as chaves saem do claro e passam a ser lidas do cofre por MI. A MI que lê o Log Analytics é irmã da que lê o Key Vault — mesmo princípio zero-segredo.
 
 ---
 

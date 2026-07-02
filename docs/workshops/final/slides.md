@@ -47,7 +47,7 @@ Workshop **Living Lab Azure-Native**
 
 1. **MCP** — o protocolo que dá ferramentas ao LLM
 2. **RAG (por tool-use)** — o chatbot **recupera** fatos reais antes de responder
-3. **Managed Identity** — o serviço se autentica **sem segredo** (Key Vault é o destino de produção)
+3. **Managed Identity + Key Vault** — os apps leem segredos do **cofre** e telemetria do Log Analytics **sem chave em claro**
 4. **Observabilidade ao vivo** — Flow Visualizer + **Azure SignalR**
 
 <small>Este deck não reexplica o que já foi dado. Só as peças novas.</small>
@@ -156,27 +156,32 @@ Peça ao chatbot uma **ação**:
 
 ---
 
-## E o Key Vault? (o destino de produção)
+## Key Vault: os segredos saem do claro (missão Blindar)
 
-- **Hoje, no lab:** os segredos (SQL, Gemini, SignalR) são **App Settings / secretref** do Container App.
-- **Em produção (EPIC-004 — próximo passo, NÃO neste lab):** esses segredos deveriam virar **Key Vault references** resolvidas pela **Managed Identity**, e o SQL usar **`Authentication=Active Directory Managed Identity`**.
+- **Antes:** as chaves (SQL, Gemini, SignalR e o **segredo do gateway**) viviam **em claro** nas App Settings / secrets do Container App.
+- **Agora (entregue):** cada chave vira um secret no **Key Vault que já existe** (nada recriado), lido por uma **Managed Identity** — uma **User-Assigned compartilhada, só-leitura** do cofre (role `Key Vault Secrets User`). Migração **in-place, sem downtime**.
 
-> A mesma Managed Identity que já lê a telemetria é a peça que, amanhã, **elimina o segredo em claro**.
+> **Ganho estrutural:** o `X-Gateway-Key` que o gateway **injeta** e o que os serviços **validam** viram **o mesmo secret** no cofre → a igualdade é **estrutural**, não dá mais para divergir e derrubar tudo.
 
-<small>Registrado honestamente como débito: `docs/security/final-security-debt.md`. O lab ensina a MID; o KV é a direção.</small>
+# "A mesma Managed Identity que lê a telemetria<br/>é a que **apaga o segredo em claro**."
+
+<small>Reuso total (ADE-010). SQL **sem senha** via MI é o próximo nível (showcase/Fase 2 — backend v1 segue com senha por retro-compat); a KV reference das chaves é entregue agora.</small>
 
 ---
 
 ## TECNOLOGIA 4 DE 4 · Observabilidade ao vivo (SignalR)
 
-- **O que é?** Um serviço de leitura de telemetria (**FlowEvents**) + **Azure SignalR** que empurra eventos ao browser em tempo real (WebSocket).
+- **O que é?** A **mesma** telemetria (App Insights + Log Analytics, **já no ar**) alimenta **duas** coisas: o **Flow Visualizer ao vivo** (FlowEvents + **Azure SignalR** por WebSocket) e a **observabilidade nível-produção** da compra — **nada recriado, ~US$0**.
 - **Como funciona (diagrama):** `traces (correlationId)` → `FlowEvents` (Kusto) → `TraceEventMapper` classifica → **SignalR** → rota `/flow` acende os nós.
 - **Principais recursos (4):**
   - **Trace-driven** — o motor lê **traces correlacionados**; não depende de quem os emitiu.
   - **Azure SignalR (Free_F1)** — **Service Mode `Default`** (não Serverless).
   - **CORS restrito** — WebSocket com credentials → origin exato, nunca `*`.
   - **5 nós** — a "bolinha" atravessa a jornada em &lt; 30s.
-- **▸ Nesta etapa:** fazer uma compra real e ver `/flow` acender **5 nós** pelo mesmo `correlationId`.
+- **▸ TAMBÉM (nível-produção, ~US$0):** tracing ponta-a-ponta por `correlationId` (Transaction Search / Application Map) · **Workbook** da jornada da compra · alertas (**5xx** no gateway · **dead-letter** no Service Bus).
+- **▸ Nesta etapa:** fazer uma compra real e ver `/flow` acender **5 nós** pelo mesmo `correlationId`; ligar o App Insights para ver o trace ponta-a-ponta.
+
+<small>A MI que lê o **Log Analytics** é irmã da MI que lê o **Key Vault** — mesmo princípio zero-segredo, contado duas vezes.</small>
 
 ---
 
@@ -242,7 +247,7 @@ Diagrama: [`final-f5-f6-mcp-flow.drawio`](../../diagrams/final-f5-f6-mcp-flow.dr
 |---|---|
 | **Voz** (F5) | uma IA consulta dados reais **com segurança** — 7 sentidos, zero escrita |
 | **Visão** (F6) | observabilidade distribuída: uma compra animada em **5 nós** por `correlationId` |
-| **Blindar** (hardening) | gateway guardião único: `X-Gateway-Key` fecha o bypass; chave Gemini nunca no bundle |
+| **Blindar** (hardening) | gateway guardião único (`X-Gateway-Key` fecha o bypass); **segredos no Key Vault** (via Managed Identity), não em claro; chave Gemini nunca no bundle |
 | **Simplificar** (re-arquitetura) | **menos peças** (notificação inline), mesma função — retro-compat |
 
 ---

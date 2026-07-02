@@ -59,8 +59,8 @@ SLIDE 2 — STACK DA FASE · "As tecnologias que vamos usar"
       tool antes de responder; não inventa.
    3. Google Gemini (gemini-2.5-flash) — o LLM que decide QUAL tool chamar
       (function calling AUTO); chave server-side.
-   4. Managed Identity (+ Key Vault como direção) — o FlowEvents lê a telemetria
-      SEM segredo (role Log Analytics Reader).
+   4. Managed Identity + Key Vault — os apps leem os segredos do cofre e a telemetria
+      do Log Analytics SEM chave em claro (roles Secrets User / Log Analytics Reader).
    5. Azure SignalR (Free / Service Mode Default) — empurra eventos ao browser em
       tempo real (WebSocket) → o Flow Visualizer (5 nós).
 • Nota de rodapé do slide (pequena): as fases anteriores já deram compra async,
@@ -151,9 +151,10 @@ SLIDE 6 — TECNOLOGIA 3 DE 4 · Managed Identity
 SLIDE 7 — TECNOLOGIA 4 DE 4 · Azure SignalR + observabilidade (Flow Visualizer)
 ════════════════════════════════════════════════════════════════════════
 • Título da tecnologia: AZURE SIGNALR · OBSERVABILIDADE AO VIVO
-• "O que é?" (2-3 frases): Um serviço de leitura de telemetria (FlowEvents) + Azure
-   SignalR que empurra eventos ao browser em tempo real (WebSocket) → o Flow Visualizer,
-   onde uma "bolinha" atravessa CINCO nós animados pela mesma compra.
+• "O que é?" (2-3 frases): A MESMA telemetria — App Insights + Log Analytics, já no ar —
+   alimenta duas coisas: (1) o Flow Visualizer AO VIVO (FlowEvents + Azure SignalR
+   empurram eventos ao browser por WebSocket, uma "bolinha" atravessa 5 nós) e (2) a
+   observabilidade NÍVEL-PRODUÇÃO da jornada da compra. Nada recriado, ~US$0.
 • Bloco COMO FUNCIONA (mini-fluxo):
    traces (correlationId) → FlowEvents lê via Kusto → TraceEventMapper classifica cada
    trace num nó → SignalR → a rota /flow ACENDE os 5 nós
@@ -163,28 +164,41 @@ SLIDE 7 — TECNOLOGIA 4 DE 4 · Azure SignalR + observabilidade (Flow Visualize
       hospedado pelo serviço).
    - CORS restrito — o WebSocket usa credentials → origin EXATO do front, nunca "*".
    - 5 nós — a bolinha atravessa a jornada em < 30s, pelo mesmo correlationId.
+• Faixa "▸ TAMBÉM · Observabilidade nível-produção (~US$0, reusa App Insights + Log
+   Analytics)": tracing ponta-a-ponta por correlationId (Transaction Search / Application
+   Map) · Workbook da jornada da compra (latência por hop, falhas, backlog do Service
+   Bus) · alertas úteis (5xx no gateway · dead-letter no Service Bus). Amarração: a MI
+   que lê o Log Analytics é IRMÃ da MI que lê o Key Vault — mesmo princípio zero-segredo.
 • Caixa "▸ NESTA ETAPA": criar o SignalR (Free/Default) + o FlowEvents (Container App
-   EXTERNO, transport Auto), fazer uma compra real e ver /flow acender os 5 nós.
+   EXTERNO, transport Auto), fazer uma compra real e ver /flow acender os 5 nós; e ligar
+   o App Insights para ver o trace ponta-a-ponta por correlationId.
 • Selo: TECNOLOGIA 4 DE 4. Acento roxo. Footer padrão.
 
 ════════════════════════════════════════════════════════════════════════
-SLIDE 8 — CONCEITO-CHAVE · Key Vault, o destino de produção
+SLIDE 8 — CONCEITO-CHAVE · Key Vault: os segredos saem do claro (missão Blindar)
 ════════════════════════════════════════════════════════════════════════
 • Rótulo: CONCEITO-CHAVE
-• Título: A mesma identidade que lê a telemetria elimina o segredo em claro
-• Corpo (contraste hoje → amanhã):
-   - HOJE, no lab: os segredos (SQL, Gemini, SignalR) são App Settings / secretref do
-      Container App.
-   - EM PRODUÇÃO (EPIC-004 — próximo passo, honestamente NÃO cabeado neste lab): esses
-      segredos deveriam virar Key Vault references resolvidas pela Managed Identity, e o
-      SQL usar Authentication=Active Directory Managed Identity.
-• Mini-visual (seta): [Managed Identity] —(hoje)→ lê a telemetria · —(amanhã)→ resolve
-   os segredos do Key Vault.
-• FRASE DE EFEITO (grande, entre aspas):
-   "A mesma Managed Identity que lê a telemetria é a que, amanhã, apaga o segredo em claro."
-• Honestidade arquitetural (linha pequena): registrado como débito conhecido em
-   docs/security/final-security-debt.md. O lab ENSINA a Managed Identity; o Key Vault é
-   a DIREÇÃO, não um passo entregue aqui.
+• Título: Os segredos em claro vão para o Key Vault — lidos por Managed Identity
+• Corpo (contraste ANTES → AGORA, é o que o aluno ENTREGA):
+   - ANTES: as chaves (SQL, Gemini, SignalR e o segredo do gateway) viviam EM CLARO nas
+      App Settings / secrets do Container App.
+   - AGORA (entrega da missão Blindar): cada chave vira um secret no Key Vault que JÁ
+      EXISTE (nada recriado), e os apps a leem por uma Managed Identity — uma
+      User-Assigned COMPARTILHADA, só-leitura do cofre (role Key Vault Secrets User).
+      Zero chave em claro na config. Migração in-place, sem downtime (o valor não muda,
+      só sai do App Setting para o cofre).
+• Mini-visual (seta): [App Settings em claro] —migra in-place→ [Key Vault (existente)]
+   ←lê via Managed Identity (User-Assigned · Secrets User)— [gateway · McpServer ·
+   FlowEvents · Functions]
+• GANHO ESTRUTURAL (destaque — não é só higiene): o segredo do gateway vira UM só no
+   cofre; o lado que INJETA o X-Gateway-Key e o lado que VALIDA (Functions/McpServer)
+   referenciam o MESMO secret → a igualdade vira ESTRUTURAL. Não dá mais para divergir
+   por engano e derrubar tudo com 401.
+• FRASE DE EFEITO (grande, entre aspas — afirmativo, é o que o aluno FAZ):
+   "A mesma Managed Identity que lê a telemetria é a que apaga o segredo em claro."
+• Honestidade (linha pequena): SQL SEM SENHA (via Managed Identity) é o "próximo nível"
+   / showcase (a Fase 2) — o backend v1 segue com senha por retro-compat; mas a KV
+   reference das chaves É entregue agora. Direção fechada na ADE-010.
 • Acento roxo/vermelho. Footer padrão.
 
 ════════════════════════════════════════════════════════════════════════
@@ -243,8 +257,9 @@ SLIDE 11 — ENCERRAMENTO DA JORNADA
       zero escrita, segurança por construção.
    • VISÃO (F6) — observabilidade ao vivo: uma compra animada em 5 nós por correlationId
       (Azure SignalR + Managed Identity).
-   • BLINDAR — o gateway é o guardião único: X-Gateway-Key fecha o bypass direto ao
-      McpServer; a chave do Gemini nunca vai no bundle.
+   • BLINDAR — o gateway é o guardião único (X-Gateway-Key fecha o bypass ao McpServer);
+      os segredos vão para o Key Vault, lidos por Managed Identity, não em claro; a chave
+      do Gemini nunca vai no bundle.
    • SIMPLIFICAR — menos peças (notificação inline, n8n removido), mesma função,
       retro-compatível com as fases anteriores.
 • Fala de fechamento (uma frase, destaque): "Você começou com uma compra de ingresso e
@@ -285,7 +300,7 @@ LEMBRETES FINAIS PARA A GERAÇÃO
   | 5 | Tec 2: Entra External ID | Tec 2: **RAG por tool-use** |
   | 6 | Tec 3: Entra ID workforce | Tec 3: **Managed Identity** |
   | 7 | Tec 4: Azure Container Apps | Tec 4: **Azure SignalR / observabilidade** |
-  | 8 | Conceito: "só muda a string da authority" | Conceito: **Key Vault, o destino de produção** |
+  | 8 | Conceito: "só muda a string da authority" | Conceito: **Key Vault — segredos saem do claro (missão Blindar)** |
   | 9 | Conceito: "modernizar sem destruir" | Conceito: **"Onde foi o n8n?" (simplificar > substituir)** |
   | 10 | Arquitetura "a foto completa da F2" | Arquitetura "a foto completa da Final" |
   | 11 | Encerramento "você concluiu as Quartas" | Encerramento "você concluiu a Copa do Mundo Azure" |
@@ -294,5 +309,6 @@ LEMBRETES FINAIS PARA A GERAÇÃO
   conteúdo; as `SPEAKER-NOTES.md` seguem o `slides.md` slide a slide e referenciam o número do
   slide equivalente deste `.pptx` (`≈ Storyboard SN`).
 - **Rastreabilidade (Art. IV):** fontes — ADE-008 (re-arquitetura sem n8n), ADE-009 (X-Gateway-Key),
-  `docs/runbooks/final-portal-guide.md`, `docs/security/final-security-debt.md`, código real
-  (`FifaTicketTools.cs`, `gemini.ts`, `FlowEventType.cs` / `flowNodes.ts`).
+  **ADE-010 (MI + Key Vault sobre os recursos existentes + observabilidade nível-produção)**,
+  `docs/runbooks/final-portal-guide.md`, código real (`FifaTicketTools.cs`, `gemini.ts`,
+  `FlowEventType.cs` / `flowNodes.ts`).

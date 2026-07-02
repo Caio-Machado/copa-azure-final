@@ -19,7 +19,7 @@
 | **▶ F5 hands-on** | *(deck pausado)* → guia **Fases 1–4** | Subir o McpServer + chatbot Gemini | 2h00–2h50 | ~3:40 |
 | **F5 clímax** | slide 11 (regra de ouro AO VIVO) → guia **Fase 5** | A demo "cria um alerta pra mim" — segurança por construção | 20 min | ~4:00 |
 | **Intervalo** | — | — | 15 min | ~4:15 |
-| **F6 conceitos** | 12–16 (divisor F6, MID, Key Vault, observabilidade, 5 nós) | Managed Identity + Key Vault (direção) + SignalR | 25 min | ~4:40 |
+| **F6 conceitos** | 12–16 (divisor F6, MID, Key Vault, observabilidade, 5 nós) | Managed Identity + Key Vault (entrega Blindar) + observabilidade/SignalR | 25 min | ~4:40 |
 | **▶ F6 hands-on** | *(deck pausado)* → guia **Fases 6–8** | Criar SignalR/MID + FlowEvents + rota `/flow` | 1h30–2h30 | ~6:30 |
 | **F6 clímax** | slides 16–18 (5 nós, onde foi o n8n, simplificar) → guia **Fase 9** | O smoke: a bolinha atravessa 5 nós ao vivo | 30 min | ~7:00 |
 | **Fechamento** | 19–22 (arquitetura, 4 missões, encerramento, obrigado) → guia entrega | Fork + retrospectiva das 4 missões + celebração | 25 min | ~7:25 |
@@ -67,12 +67,12 @@
 
 1. **MCP** — o protocolo que dá **ferramentas** ao LLM.
 2. **RAG (por tool-use)** — o chatbot **recupera** um fato real **antes** de responder.
-3. **Managed Identity** — o serviço se autentica **sem segredo** (Key Vault é o destino de produção).
+3. **Managed Identity + Key Vault** — os apps leem os segredos do **cofre** (e a telemetria) **sem chave em claro**.
 4. **Observabilidade ao vivo** — Flow Visualizer + **Azure SignalR**.
 
 **Diga o combinado de honestidade:** "Este deck **não** reexplica o que já foi dado. Se em algum momento você achar que estou repetindo Oitavas/Quartas, me corrija — não é o objetivo."
 
-> **Nota:** no `.pptx` (storyboard, DNA das Quartas) esta lista é o slide **S2 — "Stack da fase · As tecnologias que vamos usar"**, com uma linha por tecnologia (MCP, RAG por tool-use, `gemini-2.5-flash`, Managed Identity + Key Vault como direção, `Azure SignalR` Free/Default). No reveal (`slides.md`) o recap (Slide 2) e a lista (Slide 4) são slides separados. Fale a mesma coisa nos dois formatos.
+> **Nota:** no `.pptx` (storyboard, DNA das Quartas) esta lista é o slide **S2 — "Stack da fase · As tecnologias que vamos usar"**, com uma linha por tecnologia (MCP, RAG por tool-use, `gemini-2.5-flash`, Managed Identity + Key Vault, `Azure SignalR` Free/Default). No reveal (`slides.md`) o recap (Slide 2) e a lista (Slide 4) são slides separados. Fale a mesma coisa nos dois formatos.
 
 **Gancho → F5:** "Vamos abrir pela **voz**. Bloco F5."
 
@@ -224,28 +224,39 @@
 **O ponto que mais trava no hands-on (antecipe já):**
 > "Guardem o **fail-visível**: se vocês esquecerem de conceder `Log Analytics Reader` à Managed Identity, não dá erro barulhento — os **nós simplesmente não acendem** e você toma **403** no `LogsQueryClient`. É o erro nº1 do F6."
 
-**Gancho:** "E se Managed Identity resolve autenticação sem senha para a telemetria… ela também é a chave do **próximo passo de produção**: o Key Vault."
+**Gancho:** "E essa mesma ideia — uma Managed Identity com uma role *Reader* lendo um recurso gerenciado, **sem segredo** — é exatamente o que vai **tirar as chaves do claro**: o Key Vault."
 
-## Slide 14 — "E o Key Vault? (o destino de produção)" · ≈ Storyboard S8 [~5 min]
+## Slide 14 — "Key Vault: os segredos saem do claro (missão Blindar)" · ≈ Storyboard S8 [~5 min]
 
-> **Slide de conceito-chave — honestidade arquitetural. Não venda o que o lab não entrega.**
+> **Slide de conceito-chave — agora é ENTREGA, não débito. Afirme o que o aluno FAZ (base: ADE-010).**
 
 **Fala:**
-> "Pergunta justa: 'e o Key Vault, não entra?' Vamos ser **honestos**. **Hoje, no lab:** os segredos (SQL, Gemini, SignalR) são **App Settings / secretref** do Container App. **Em produção — EPIC-004, o próximo passo, que NÃO está cabeado neste lab —** esses segredos deveriam virar **Key Vault references** resolvidas pela **Managed Identity**, e o SQL usar `Authentication=Active Directory Managed Identity`."
+> "Pergunta justa: 'e o Key Vault, não entra?' **Entra — e é entrega da missão Blindar.** **Antes**, as chaves — SQL, Gemini, SignalR e o **segredo do gateway** — viviam **em claro** nas App Settings / secrets do Container App. **Agora** cada uma vira um secret no **Key Vault que já existe** (não recriamos nada), lido por uma **Managed Identity** — uma **User-Assigned compartilhada, só-leitura** do cofre (role `Key Vault Secrets User`). Zero chave em claro na config."
 
-**A ponte (o insight):**
-> "A **mesma** Managed Identity que vocês acabaram de ligar para ler a telemetria é a peça que, amanhã, **elimina o segredo em claro**. Aprender MID hoje **é** aprender a base do Key Vault de produção."
+**Enfatize a migração segura:** "É **in-place, sem downtime**: o **valor** do segredo não muda, só sai do App Setting e vai para o cofre. Um recurso por vez, com gate de validação — as Quartas nunca caem."
 
-**Honestidade (aponte o rodapé):** "Isso está registrado como **débito conhecido** em `docs/security/final-security-debt.md`. O lab **ensina a Managed Identity**; o **Key Vault é a direção**, não um passo entregue aqui. Prefiro dizer isso do que fingir que o lab é production-ready."
+**O ganho estrutural (o insight de arquitetura, não só higiene):**
+> "Reparem no `X-Gateway-Key`: o lado que **injeta** (no gateway) e o lado que **valida** (Functions/McpServer) precisavam ter o **mesmo** valor — dois App Settings independentes que podiam **divergir por engano** e derrubar tudo com 401. Centralizando em **um** secret no cofre, referenciado pelos dois lados, a igualdade vira **estrutural**. O cofre não é só higiene — ele **remove uma classe de falha**."
 
-**Gancho:** "Com a identidade pronta para ler telemetria, falta o **canal** que empurra essa telemetria para a sua tela em tempo real: SignalR."
+**A frase de efeito (afirmativa — é o que o aluno faz):**
+> "A **mesma** Managed Identity que lê a telemetria é a que **apaga o segredo em claro**."
+
+**Honestidade (aponte o rodapé):** "Reuso total — o cofre `kv-dev-tk-cin-001` já existia; nada de novo além da identidade de leitura. **SQL sem senha** (via Managed Identity) é o **próximo nível / showcase** (a Fase 2): o **backend v1 ainda usa senha** por retro-compat, então a senha do SQL vai para o cofre agora e só **deixa de existir** na Fase 2. Mas a **KV reference das chaves é entregue aqui**. Direção fechada na **ADE-010**."
+
+**Gancho:** "E esse mesmo raciocínio de identidade gerenciada tem uma **irmã**: a MI que lê o **Log Analytics** para a observabilidade. Vamos ao canal que empurra a telemetria para a sua tela: SignalR."
 
 ## Slide 15 — "TECNOLOGIA 4 DE 4 · Observabilidade ao vivo (SignalR)" · ≈ Storyboard S7 [~6 min]
 
 **Fala (siga a estrutura):**
-- **O que é?** "Um serviço de leitura de telemetria (**FlowEvents**) + **Azure SignalR** que empurra eventos ao browser em tempo real (WebSocket) → o **Flow Visualizer**."
+- **O que é?** "A **mesma** telemetria — **App Insights + Log Analytics, já no ar** — alimenta **duas** coisas: o **Flow Visualizer ao vivo** (**FlowEvents** + **Azure SignalR** empurram eventos por WebSocket) **e** a **observabilidade nível-produção** da compra. Nada recriado, ~US$0."
 - **Como funciona (aponte):** `traces (correlationId) → FlowEvents lê via Kusto → TraceEventMapper classifica cada trace num nó → SignalR → a rota /flow acende os nós`.
 - **Os 4 recursos:** **Trace-driven** (o motor lê **traces correlacionados**; é agnóstico a quem os emitiu) · **Azure SignalR (Free_F1)** com **Service Mode `Default`** (⚠️ **não** Serverless — o FlowHub é hospedado pelo serviço) · **CORS restrito** (o WebSocket usa credentials → **origin exato** do front, nunca `*`) · **5 nós** (a "bolinha" atravessa a jornada em **< 30s**).
+
+**Reforce o lado observabilidade (nível-produção, ~US$0 — reusa App Insights + Log Analytics, base ADE-010):**
+> "A mesma telemetria que acende os nós também dá **observabilidade de produção**, de graça, porque reusa o App Insights e o Log Analytics que já estão no ar: **tracing ponta-a-ponta por `correlationId`** (Transaction Search / Application Map), um **Workbook** da jornada da compra (latência por hop, falhas, backlog do Service Bus) e **alertas úteis** — **5xx no gateway** e **dead-letter no Service Bus**."
+
+**A amarração didática (segurança ≙ observabilidade):**
+> "Reparem no padrão: a MI que lê o **Log Analytics** (`Log Analytics Reader`) é **irmã** da MI que lê o **Key Vault** (`Key Vault Secrets User`) do slide anterior. Uma identidade gerenciada com uma role *Reader* lendo um recurso gerenciado, **sem segredo**. É a **mesma disciplina**, contada duas vezes — segurança e observabilidade."
 
 **Erros a plantar (colhe no hands-on):** "Dois clássicos: criar o SignalR em **Serverless** (ele recusa por tier — tem de ser **Default**), e esquecer o **origin exato** no CORS (WebSocket com credentials não aceita `*`)."
 
@@ -338,7 +349,7 @@
 **Fala (percorra a tabela, com orgulho):**
 - **Voz (F5):** uma IA consulta dados reais **com segurança** — 7 sentidos, zero escrita; a regra de ouro vale **por construção**.
 - **Visão (F6):** observabilidade distribuída — uma compra animada em **5 nós** por `correlationId`.
-- **Blindar (hardening):** o gateway é o **guardião único** — `X-Gateway-Key` fecha o bypass direto ao McpServer; chave Gemini **nunca** no bundle; cache pós-auth.
+- **Blindar (hardening):** o gateway é o **guardião único** — `X-Gateway-Key` fecha o bypass direto ao McpServer; **os segredos vão para o Key Vault** (lidos por Managed Identity), não em claro; chave Gemini **nunca** no bundle; cache pós-auth.
 - **Simplificar (re-arquitetura):** **menos peças** (notificação inline), mesma função — retro-compat.
 
 **Perguntas de discussão para fechar (as mesmas do guia):**
@@ -385,4 +396,4 @@
 - **"A senha… " não; aqui a frase-chave é a alucinação de texto:** no slide 11, a nuance "o LLM pode *dizer* que criou o alerta, mas texto **não é** tool call" é obrigatória. Não pule.
 - **Sempre 5 nós, nunca 6.** O n8n só aparece como **"o que removemos"** (slides 17–18). Nunca como componente presente, nunca "automação no-code".
 - **Retro-compatibilidade é regra dura:** repita no slide 2 e no slide 19. Nada de Oitavas/Quartas deixou de funcionar.
-- Tom: prático, honesto sobre trade-offs (Key Vault = débito; notificação invisível = trade-off), sem hype. A turma é técnica e respeita transparência — igual à F1/F2.
+- Tom: prático, honesto sobre trade-offs (Key Vault **entregue** — mas SQL sem senha é showcase/Fase 2; notificação invisível = trade-off), sem hype. A turma é técnica e respeita transparência — igual à F1/F2.
